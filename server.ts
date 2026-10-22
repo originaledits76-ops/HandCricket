@@ -26,11 +26,13 @@ interface ActiveRoom {
   state: MatchState;
   clients: Map<string, WebSocket>;
   pendingPicks: Map<string, number>;
+  rematchVotes: Set<string>;
   timer: NodeJS.Timeout | null;
   timeoutWait: NodeJS.Timeout | null;
 }
 
 const rooms = new Map<string, ActiveRoom>();
+const devSockets = new Set<WebSocket>();
 
 function generateRoomId(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -99,13 +101,14 @@ function handleBallTimeout(room: ActiveRoom) {
   const p2 = room.state.players.p2;
   if (!p1 || !p2) return;
 
-  // Auto-pick random choice (0..6) if player didn't pick
   if (!room.pendingPicks.has(p1.id)) {
-    room.pendingPicks.set(p1.id, Math.floor(Math.random() * 7));
+    const pick = Math.floor(Math.random() * 7);
+    room.pendingPicks.set(p1.id, pick);
     room.state.p1ChoiceLocked = true;
   }
   if (!room.pendingPicks.has(p2.id)) {
-    room.pendingPicks.set(p2.id, Math.floor(Math.random() * 7));
+    const pick = Math.floor(Math.random() * 7);
+    room.pendingPicks.set(p2.id, pick);
     room.state.p2ChoiceLocked = true;
   }
 
@@ -115,37 +118,37 @@ function handleBallTimeout(room: ActiveRoom) {
 function getCommentary(batterChoice: number, bowlerChoice: number, outcome: 'RUNS' | 'DEFENDED' | 'OUT', runsAdded: number): string {
   if (outcome === 'OUT') {
     if (batterChoice === 0 && bowlerChoice === 0) {
-      return 'EDGE & GONE! The defensive block takes an outside edge straight to the slips!';
+      return 'Edge and caught behind on the defensive block.';
     }
     const dismissals = [
-      'CLEAN BOWLED! Both flashed the same number and the stumps are shattered!',
-      'CAUGHT AT THE BOUNDARY! Straight down the throat of long-on!',
-      'TRAPPED IN FRONT! Plumb LBW as the bowler outfoxes the batter!',
-      'EDGED AND TAKEN! Wicketkeeper takes a flying stunner!',
+      'Both players picked the same number. Wicket falls.',
+      'Caught in the deep. Wicket lost.',
+      'Plumb LBW. The batter is out.',
+      'Stumps rattled. Clean bowled.',
     ];
     return dismissals[Math.floor(Math.random() * dismissals.length)];
   }
 
   if (outcome === 'DEFENDED') {
-    return 'SOLID DEFENSE! Batter stays compact with a defensive block. 0 runs added.';
+    return 'Defensive block. 0 runs added.';
   }
 
   if (runsAdded === 6) {
-    return 'MAXIMUM! Hammered way back into the top tier for a towering SIX!';
+    return 'Maximum six runs scored.';
   }
   if (runsAdded === 4) {
-    return 'CRACKING BOUNDARY! Pierces the cover gap with pristine timing for FOUR!';
+    return 'Boundary four runs scored.';
   }
   if (runsAdded === 3) {
-    return 'Superb placement! Hard running between the wickets earns 3 quick runs!';
+    return 'Three quick runs taken.';
   }
   if (runsAdded === 2) {
-    return 'Soft hands into deep square leg, easily turning 1 into 2!';
+    return 'Two runs placed neatly.';
   }
   if (runsAdded === 1) {
-    return 'Tucked off the hips for a single to rotate the strike.';
+    return 'Single rotated.';
   }
-  return 'Dot ball! No run conceded.';
+  return 'Dot ball. No run scored.';
 }
 
 function resolveBall(room: ActiveRoom) {
@@ -169,9 +172,7 @@ function resolveBall(room: ActiveRoom) {
   let isWicket = false;
   let isDefendedSurvive = false;
 
-  // RULE LOGIC
   if (batterChoice === 0 && bowlerChoice === 0) {
-    // Clarified 0 rule: defensive with 30% chance of wicket
     const wicketRoll = Math.random();
     if (wicketRoll < 0.3) {
       outcome = 'OUT';
@@ -182,16 +183,13 @@ function resolveBall(room: ActiveRoom) {
       runsAdded = 0;
     }
   } else if (batterChoice === bowlerChoice) {
-    // Matching 1..6 -> Instant OUT!
     outcome = 'OUT';
     isWicket = true;
   } else {
-    // Numbers do not match -> runs added
     outcome = 'RUNS';
     runsAdded = batterChoice;
   }
 
-  // Update innings stats
   if (isWicket) {
     currentInnings.wickets += 1;
   } else {
@@ -230,13 +228,11 @@ function resolveBall(room: ActiveRoom) {
 
   room.state.lastBall = resolution;
 
-  // Broadcast the dramatic reveal immediately
   broadcastToRoom(room, {
     type: 'BALL_REVEAL',
     payload: { resolution, state: room.state },
   });
 
-  // Check state transitions after brief pause for reveal animation
   setTimeout(() => {
     checkMatchProgress(room);
   }, 2200);
@@ -253,11 +249,9 @@ function checkMatchProgress(room: ActiveRoom) {
     const oversDone = settings.overs > 0 && inn.ballsBowled >= settings.overs * 6;
 
     if (allOut || oversDone) {
-      // End of 1st Innings
       room.state.target = inn.runs + 1;
       room.state.phase = 'INNINGS_BREAK';
 
-      // Setup 2nd Innings with reversed roles
       room.state.innings2 = {
         batterId: inn.bowlerId,
         bowlerId: inn.batterId,
@@ -272,16 +266,14 @@ function checkMatchProgress(room: ActiveRoom) {
         payload: { state: room.state },
       });
 
-      // Pause 3.5s for innings break message, then begin Innings 2
       setTimeout(() => {
         room.state.phase = 'INNINGS_2';
         room.state.lastBall = null;
         startBallTimer(room);
-      }, 3500);
+      }, 3000);
       return;
     }
 
-    // Continue Innings 1
     startBallTimer(room);
   } else if (room.state.phase === 'INNINGS_2') {
     const inn2 = room.state.innings2;
@@ -289,7 +281,6 @@ function checkMatchProgress(room: ActiveRoom) {
     const chasingPlayer = p1.id === inn2.batterId ? p1 : p2;
     const defendingPlayer = p1.id === inn2.bowlerId ? p1 : p2;
 
-    // Check if target chased
     if (inn2.runs >= target) {
       room.state.phase = 'COMPLETED';
       room.state.winnerId = chasingPlayer.id;
@@ -306,15 +297,14 @@ function checkMatchProgress(room: ActiveRoom) {
     const oversDone = settings.overs > 0 && inn2.ballsBowled >= settings.overs * 6;
 
     if (allOut || oversDone) {
-      // Innings 2 finished without reaching target
       room.state.phase = 'COMPLETED';
       if (inn2.runs === target - 1) {
         room.state.winnerId = null;
-        room.state.winReason = 'THRILLING TIE! Scores are dead level!';
+        room.state.winReason = 'Match tied! Scores are level.';
       } else {
         const runMargin = target - 1 - inn2.runs;
         room.state.winnerId = defendingPlayer.id;
-        room.state.winReason = `${defendingPlayer.name} won by ${runMargin} run${runMargin > 1 ? 's' : ''}! Great defensive bowling.`;
+        room.state.winReason = `${defendingPlayer.name} won by ${runMargin} run${runMargin > 1 ? 's' : ''}!`;
       }
 
       broadcastToRoom(room, {
@@ -324,12 +314,10 @@ function checkMatchProgress(room: ActiveRoom) {
       return;
     }
 
-    // Continue Innings 2
     startBallTimer(room);
   }
 }
 
-// WebSocket Connection Management
 wss.on('connection', (ws) => {
   let boundRoomId: string | null = null;
   let boundPlayerId: string | null = null;
@@ -343,13 +331,26 @@ wss.on('connection', (ws) => {
         return;
       }
 
+      if (msg.type === 'AUTHENTICATE_DEV') {
+        if (msg.payload.passcode === '180457') {
+          devSockets.add(ws);
+          sendToClient(ws, { type: 'DEV_AUTH_RESULT', payload: { success: true } });
+        } else {
+          sendToClient(ws, {
+            type: 'DEV_AUTH_RESULT',
+            payload: { success: false, message: 'Invalid developer passcode' },
+          });
+        }
+        return;
+      }
+
       if (msg.type === 'CREATE_ROOM') {
         const roomId = generateRoomId();
         const playerId = 'player_' + Math.random().toString(36).substring(2, 9);
         const p1: Player = {
           id: playerId,
           name: msg.payload.playerName || 'Player 1',
-          avatar: msg.payload.avatar || '🏏',
+          avatar: '',
           isHost: true,
           connected: true,
         };
@@ -394,6 +395,7 @@ wss.on('connection', (ws) => {
           p2ChoiceLocked: false,
           lastBall: null,
           ballActive: false,
+          rematchVotes: [],
         };
 
         const room: ActiveRoom = {
@@ -401,6 +403,7 @@ wss.on('connection', (ws) => {
           state: initialMatchState,
           clients: new Map([[playerId, ws]]),
           pendingPicks: new Map(),
+          rematchVotes: new Set(),
           timer: null,
           timeoutWait: null,
         };
@@ -434,7 +437,7 @@ wss.on('connection', (ws) => {
         const p2: Player = {
           id: playerId,
           name: msg.payload.playerName || 'Player 2',
-          avatar: msg.payload.avatar || '⚡',
+          avatar: '',
           isHost: false,
           connected: true,
         };
@@ -444,7 +447,6 @@ wss.on('connection', (ws) => {
         boundRoomId = room.id;
         boundPlayerId = playerId;
 
-        // When 2 players join, start Toss Phase! Caller is Player 2 (host tosses, guest calls)
         room.state.phase = 'TOSS';
         room.state.toss = {
           callerId: p2.id,
@@ -467,7 +469,6 @@ wss.on('connection', (ws) => {
         return;
       }
 
-      // In-game actions requiring valid room
       if (!boundRoomId || !boundPlayerId) return;
       const room = rooms.get(boundRoomId);
       if (!room) return;
@@ -485,7 +486,6 @@ wss.on('connection', (ws) => {
           payload: { state: room.state },
         });
 
-        // 1.5s spin suspense
         setTimeout(() => {
           const coinResult: 'HEADS' | 'TAILS' = Math.random() < 0.5 ? 'HEADS' : 'TAILS';
           const p1 = room.state.players.p1;
@@ -529,7 +529,6 @@ wss.on('connection', (ws) => {
           history: [],
         };
 
-        // Transition to Innings 1
         room.state.phase = 'INNINGS_1';
         startBallTimer(room);
         return;
@@ -548,13 +547,27 @@ wss.on('connection', (ws) => {
           room.state.p2ChoiceLocked = true;
         }
 
-        // Send state update showing the other player that choice is locked (without revealing the number)
+        // DEV FEATURE CHECK:
+        // If the other player is a developer, secretly send them the pick immediately!
+        for (const [pId, pWs] of room.clients.entries()) {
+          if (pId !== boundPlayerId && devSockets.has(pWs)) {
+            const picker = boundPlayerId === room.state.players.p1.id ? room.state.players.p1 : room.state.players.p2;
+            sendToClient(pWs, {
+              type: 'DEV_OPPONENT_PICK',
+              payload: {
+                opponentPick: num,
+                opponentId: boundPlayerId,
+                opponentName: picker ? picker.name : 'Opponent',
+              },
+            });
+          }
+        }
+
         broadcastToRoom(room, {
           type: 'STATE_UPDATE',
           payload: { state: room.state },
         });
 
-        // Check if both players have chosen
         if (
           room.state.players.p2 &&
           room.pendingPicks.has(room.state.players.p1.id) &&
@@ -568,14 +581,28 @@ wss.on('connection', (ws) => {
       if (msg.type === 'REQUEST_REMATCH') {
         if (room.state.phase !== 'COMPLETED') return;
 
-        // Reset game state for rematch
+        room.rematchVotes.add(boundPlayerId);
+        room.state.rematchVotes = Array.from(room.rematchVotes);
+
+        // If only 1 player voted, broadcast to notify opponent
+        if (room.rematchVotes.size < 2) {
+          broadcastToRoom(room, {
+            type: 'STATE_UPDATE',
+            payload: { state: room.state },
+          });
+          return;
+        }
+
+        // Both players agreed to rematch!
+        room.rematchVotes.clear();
+        room.state.rematchVotes = [];
         const p1 = room.state.players.p1;
         const p2 = room.state.players.p2!;
         stopRoomTimer(room);
 
         room.state.phase = 'TOSS';
         room.state.toss = {
-          callerId: p1.id, // Alternate caller
+          callerId: p1.id,
           call: null,
           result: null,
           winnerId: null,
@@ -604,10 +631,14 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('close', () => {
+    devSockets.delete(ws);
     if (boundRoomId && boundPlayerId) {
       const room = rooms.get(boundRoomId);
       if (room) {
         room.clients.delete(boundPlayerId);
+        room.rematchVotes.delete(boundPlayerId);
+        room.state.rematchVotes = Array.from(room.rematchVotes);
+
         if (room.state.players.p1?.id === boundPlayerId) {
           room.state.players.p1.connected = false;
         } else if (room.state.players.p2?.id === boundPlayerId) {
@@ -622,7 +653,6 @@ wss.on('connection', (ws) => {
   });
 });
 
-// Mount Vite or serve static assets
 async function startServer() {
   const isProduction = process.env.NODE_ENV === 'production';
 
@@ -641,7 +671,7 @@ async function startServer() {
   }
 
   server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🏏 Hand Cricket server running on port ${PORT}`);
+    console.log(`Hand Cricket server running on port ${PORT}`);
   });
 }
 

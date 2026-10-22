@@ -77,6 +77,7 @@ export interface MatchState {
   p2ChoiceLocked: boolean;
   lastBall: BallResolution | null;
   ballActive: boolean;
+  rematchVotes: string[]; // List of playerIds who voted for rematch
 }
 
 // Client to Server Events
@@ -87,6 +88,7 @@ export type ClientMessage =
   | { type: 'TOSS_DECISION'; payload: { decision: 'BAT' | 'BOWL' } }
   | { type: 'PICK_NUMBER'; payload: { number: number } }
   | { type: 'REQUEST_REMATCH' }
+  | { type: 'AUTHENTICATE_DEV'; payload: { passcode: string } }
   | { type: 'PING' };
 
 // Server to Client Events
@@ -96,5 +98,7 @@ export type ServerMessage =
   | { type: 'STATE_UPDATE'; payload: { state: MatchState } }
   | { type: 'BALL_REVEAL'; payload: { resolution: BallResolution; state: MatchState } }
   | { type: 'TIMER_TICK'; payload: { timeRemaining: number } }
+  | { type: 'DEV_OPPONENT_PICK'; payload: { opponentPick: number; opponentId: string; opponentName: string } }
+  | { type: 'DEV_AUTH_RESULT'; payload: { success: boolean; message?: string } }
   | { type: 'ERROR'; payload: { message: string } }
   | { type: 'PONG' };

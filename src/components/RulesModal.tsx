@@ -11,8 +11,8 @@ export const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm animate-fadeIn">
-      <div className="relative w-full max-w-md liquid-card rounded-3xl shadow-xl overflow-hidden max-h-[85vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/30 backdrop-blur-sm animate-fadeIn box-border overflow-y-auto">
+      <div className="relative w-full max-w-[min(28rem,calc(100vw-1.5rem))] liquid-card rounded-3xl shadow-xl overflow-hidden max-h-[85vh] flex flex-col box-border my-auto">
         <div className="pt-2.5 pb-1 flex justify-center">
           <div className="w-8 h-1 rounded-full bg-neutral-300/80" />
         </div>

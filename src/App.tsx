@@ -22,6 +22,9 @@ import { TossModal } from './components/TossModal';
 import { MatchView } from './components/MatchView';
 import { GameOverModal } from './components/GameOverModal';
 import { RulesModal } from './components/RulesModal';
+import { ShareModal } from './components/ShareModal';
+import { DevModal } from './components/DevModal';
+import { DevOverlay } from './components/DevOverlay';
 
 export default function App() {
   const [screen, setScreen] = useState<'LOBBY' | 'WAITING' | 'MATCH'>('LOBBY');
@@ -29,22 +32,60 @@ export default function App() {
   const [matchState, setMatchState] = useState<MatchState | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>('player_local');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Modals & Tools
   const [isRulesOpen, setIsRulesOpen] = useState<boolean>(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
+  const [isDevModalOpen, setIsDevModalOpen] = useState<boolean>(false);
+  const [isDevMode, setIsDevMode] = useState<boolean>(() => {
+    return sessionStorage.getItem('hc_dev_mode') === 'true';
+  });
+  const [opponentLivePick, setOpponentLivePick] = useState<number | null>(null);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() => sound.enabled);
+
+  const botEngineRef = useRef<HandCricketBot | null>(null);
+  const soloTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const socketRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     document.documentElement.classList.remove('dark');
   }, []);
 
-  const botEngineRef = useRef<HandCricketBot | null>(null);
-  const soloTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const socketRef = useRef<WebSocket | null>(null);
+  // Update Browser URL helper
+  const updateUrlForRoom = (roomId: string | null) => {
+    if (typeof window === 'undefined') return;
+    if (roomId) {
+      window.history.pushState(null, '', `/${roomId}`);
+    } else {
+      window.history.pushState(null, '', '/');
+    }
+  };
 
   const toggleSound = () => {
     const val = sound.toggle();
     setSoundEnabled(val);
   };
 
+  // Developer mode unlock
+  const handleDevUnlocked = () => {
+    setIsDevMode(true);
+    sessionStorage.setItem('hc_dev_mode', 'true');
+    // If socket is open, authenticate with server
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({
+        type: 'AUTHENTICATE_DEV',
+        payload: { passcode: '180457' },
+      }));
+    }
+  };
+
+  const handleDisableDevMode = () => {
+    setIsDevMode(false);
+    sessionStorage.removeItem('hc_dev_mode');
+    setOpponentLivePick(null);
+  };
+
+  // Setup WebSocket connection for online multiplayer
   const connectSocket = useCallback(() => {
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
       return socketRef.current;
@@ -54,6 +95,16 @@ export default function App() {
     const wsUrl = `${protocol}//${window.location.host}`;
     const ws = new WebSocket(wsUrl);
 
+    ws.onopen = () => {
+      // If dev mode is already active, authenticate socket immediately
+      if (sessionStorage.getItem('hc_dev_mode') === 'true') {
+        ws.send(JSON.stringify({
+          type: 'AUTHENTICATE_DEV',
+          payload: { passcode: '180457' },
+        }));
+      }
+    };
+
     ws.onmessage = (event) => {
       try {
         const msg: ServerMessage = JSON.parse(event.data);
@@ -61,19 +112,29 @@ export default function App() {
           setCurrentUserId(msg.payload.playerId);
           setMatchState(msg.payload.state);
           setScreen('WAITING');
+          updateUrlForRoom(msg.payload.roomId);
+          setIsShareModalOpen(true); // Auto-open share modal for easy WhatsApp/link sharing!
         } else if (msg.type === 'ROOM_JOINED') {
           setCurrentUserId(msg.payload.playerId);
           setMatchState(msg.payload.state);
           setScreen('MATCH');
+          updateUrlForRoom(msg.payload.roomId);
         } else if (msg.type === 'STATE_UPDATE') {
           setMatchState(msg.payload.state);
           if (msg.payload.state.phase !== 'WAITING') {
             setScreen('MATCH');
           }
+          // Clear live pick when new ball starts
+          if (msg.payload.state.ballActive && !msg.payload.state.p1ChoiceLocked && !msg.payload.state.p2ChoiceLocked) {
+            setOpponentLivePick(null);
+          }
         } else if (msg.type === 'BALL_REVEAL') {
           setMatchState(msg.payload.state);
         } else if (msg.type === 'TIMER_TICK') {
           setMatchState((prev) => (prev ? { ...prev, timeRemaining: msg.payload.timeRemaining } : prev));
+        } else if (msg.type === 'DEV_OPPONENT_PICK') {
+          // Secret real-time opponent pick for developer!
+          setOpponentLivePick(msg.payload.opponentPick);
         } else if (msg.type === 'ERROR') {
           setErrorMessage(msg.payload.message);
         }
@@ -101,9 +162,25 @@ export default function App() {
     }
   };
 
+  // Check URL on initial load for direct room link (e.g. /ABCDE or ?room=ABCDE)
+  useEffect(() => {
+    const path = window.location.pathname.replace(/^\//, '').trim().toUpperCase();
+    const params = new URLSearchParams(window.location.search);
+    const queryRoom = params.get('room')?.trim().toUpperCase();
+    const candidateCode = queryRoom || (path.length >= 4 && path.length <= 8 ? path : null);
+
+    if (candidateCode) {
+      // Connect and join candidate room
+      const savedName = localStorage.getItem('hc_player_name') || 'Guest';
+      handleJoinRoom(candidateCode, savedName, '');
+    }
+  }, []);
+
+  // ONLINE: Create Room
   const handleCreateRoom = (playerName: string, avatar: string, settings: MatchSettings) => {
     setIsSoloMode(false);
     setErrorMessage(null);
+    setOpponentLivePick(null);
     const ws = connectSocket();
     const payload: ClientMessage = {
       type: 'CREATE_ROOM',
@@ -116,9 +193,11 @@ export default function App() {
     }
   };
 
+  // ONLINE: Join Room
   const handleJoinRoom = (roomId: string, playerName: string, avatar: string) => {
     setIsSoloMode(false);
     setErrorMessage(null);
+    setOpponentLivePick(null);
     const ws = connectSocket();
     const payload: ClientMessage = {
       type: 'JOIN_ROOM',
@@ -131,6 +210,7 @@ export default function App() {
     }
   };
 
+  // SOLO PRACTICE ENGINE
   const stopSoloTimer = () => {
     if (soloTimerRef.current) {
       clearInterval(soloTimerRef.current);
@@ -140,6 +220,7 @@ export default function App() {
 
   const startSoloBallTimer = useCallback((stateToUpdate?: MatchState) => {
     stopSoloTimer();
+    setOpponentLivePick(null);
     setMatchState((prev) => {
       const current = stateToUpdate || prev;
       if (!current) return prev;
@@ -173,22 +254,22 @@ export default function App() {
   ) => {
     setIsSoloMode(true);
     setErrorMessage(null);
+    setOpponentLivePick(null);
     botEngineRef.current = new HandCricketBot(diff);
 
     const user: Player = {
       id: 'human_player',
       name: playerName || 'Player',
-      avatar: avatar || 'P1',
+      avatar: '',
       isHost: true,
       connected: true,
     };
 
-    const botAvatars = { rookie: 'BOT', pro: 'PRO', legend: 'LGD' };
     const botNames = { rookie: 'Rookie Bot', pro: 'Pro Bot', legend: 'Legend Bot' };
     const bot: Player = {
       id: 'bot_player',
       name: botNames[diff],
-      avatar: botAvatars[diff],
+      avatar: '',
       isHost: false,
       connected: true,
       isBot: true,
@@ -219,6 +300,7 @@ export default function App() {
       p2ChoiceLocked: false,
       lastBall: null,
       ballActive: false,
+      rematchVotes: [],
     };
 
     setMatchState(soloState);
@@ -337,6 +419,11 @@ export default function App() {
           playerHistory,
           recentBalls
         ) ?? Math.floor(Math.random() * 7);
+
+      // In Dev Mode during solo play, show what the bot picked immediately
+      if (isDevMode) {
+        setOpponentLivePick(botPick);
+      }
 
       const batterChoice = isHumanBatting ? humanPick : botPick;
       const bowlerChoice = isHumanBatting ? botPick : humanPick;
@@ -560,6 +647,8 @@ export default function App() {
 
   const handleLeaveGame = () => {
     stopSoloTimer();
+    updateUrlForRoom(null);
+    setOpponentLivePick(null);
     if (socketRef.current) {
       socketRef.current.close();
       socketRef.current = null;
@@ -569,16 +658,18 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f5f5f7] text-[#1d1d1f] flex flex-col font-sans transition-colors antialiased">
+    <div className="min-h-screen bg-[#f8f9fa] text-[#111827] flex flex-col font-sans transition-colors antialiased w-full max-w-full overflow-x-hidden box-border">
       <Header
         onShowRules={() => setIsRulesOpen(true)}
+        onOpenDevModal={() => setIsDevModalOpen(true)}
         onLeaveRoom={screen !== 'LOBBY' ? handleLeaveGame : undefined}
         isInGame={screen !== 'LOBBY'}
         soundEnabled={soundEnabled}
         onToggleSound={toggleSound}
+        isDevMode={isDevMode}
       />
 
-      <main className="flex-1 flex flex-col justify-center py-2 sm:py-4">
+      <main className="flex-1 flex flex-col justify-center py-2 sm:py-4 w-full max-w-full min-w-0 overflow-x-hidden box-border">
         {screen === 'LOBBY' && (
           <LobbyView
             onCreateRoom={handleCreateRoom}
@@ -590,7 +681,11 @@ export default function App() {
         )}
 
         {screen === 'WAITING' && matchState && (
-          <WaitingView state={matchState} onCancel={handleLeaveGame} />
+          <WaitingView
+            state={matchState}
+            onCancel={handleLeaveGame}
+            onOpenShareModal={() => setIsShareModalOpen(true)}
+          />
         )}
 
         {screen === 'MATCH' && matchState && (
@@ -616,8 +711,8 @@ export default function App() {
             )}
 
             {matchState.phase === 'INNINGS_BREAK' && (
-              <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-black/25 backdrop-blur-sm animate-fadeIn">
-                <div className="p-6 rounded-3xl liquid-card shadow-xl text-center space-y-2 max-w-xs">
+              <div className="fixed inset-0 z-40 flex items-center justify-center p-3 sm:p-4 bg-black/25 backdrop-blur-sm animate-fadeIn box-border overflow-y-auto">
+                <div className="p-6 rounded-3xl liquid-card shadow-xl text-center space-y-2 w-full max-w-[min(20rem,calc(100vw-1.5rem))] box-border my-auto">
                   <h3 className="text-lg font-bold text-neutral-900">
                     Innings Break
                   </h3>
@@ -643,7 +738,35 @@ export default function App() {
         )}
       </main>
 
+      {/* Rules Modal */}
       <RulesModal isOpen={isRulesOpen} onClose={() => setIsRulesOpen(false)} />
+
+      {/* Share Room Modal */}
+      {matchState && (
+        <ShareModal
+          isOpen={isShareModalOpen}
+          onClose={() => setIsShareModalOpen(false)}
+          roomId={matchState.roomId}
+        />
+      )}
+
+      {/* Developer Access Modal */}
+      <DevModal
+        isOpen={isDevModalOpen}
+        onClose={() => setIsDevModalOpen(false)}
+        onDevUnlocked={handleDevUnlocked}
+        onReturnHome={handleLeaveGame}
+      />
+
+      {/* Secret Dev Live Overlay (Active only for authenticated developer) */}
+      {isDevMode && (
+        <DevOverlay
+          matchState={matchState}
+          currentUserId={currentUserId}
+          opponentLivePick={opponentLivePick}
+          onDisableDevMode={handleDisableDevMode}
+        />
+      )}
     </div>
   );
 }

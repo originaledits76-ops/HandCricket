@@ -31,17 +31,17 @@ export const TossModal: React.FC<TossModalProps> = ({
   }, [toss.phase]);
 
   return (
-    <div className="max-w-md w-full mx-auto px-4 py-8 animate-fadeIn">
-      <div className="liquid-card rounded-3xl p-6 sm:p-7 shadow-xl text-center space-y-5">
+    <div className="max-w-md w-full mx-auto px-3 sm:px-4 py-6 box-border overflow-hidden">
+      <div className="liquid-card rounded-3xl p-5 sm:p-7 shadow-xl text-center space-y-4 w-full box-border">
         <div>
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-semibold mb-2">
             <Sparkles className="w-3.5 h-3.5" />
             <span>Pre-Match Toss</span>
           </div>
-          <h2 className="text-2xl font-bold text-neutral-900 tracking-tight">
+          <h2 className="text-xl sm:text-2xl font-bold text-neutral-900 tracking-tight">
             The Toss
           </h2>
-          <p className="text-xs text-neutral-500 mt-1">
+          <p className="text-xs text-neutral-500 mt-1 max-w-xs mx-auto truncate">
             {toss.phase === 'CALLING'
               ? isCaller
                 ? 'Make your call'
@@ -53,13 +53,13 @@ export const TossModal: React.FC<TossModalProps> = ({
         </div>
 
         {/* Coin Display */}
-        <div className="py-3 flex items-center justify-center">
+        <div className="py-2 flex items-center justify-center">
           <div
-            className={`w-24 h-24 rounded-full border-4 border-amber-300 bg-gradient-to-tr from-amber-400 via-amber-200 to-yellow-400 shadow-md flex items-center justify-center relative transition-transform ${
+            className={`w-20 h-20 sm:w-24 sm:h-24 rounded-full border-4 border-amber-300 bg-gradient-to-tr from-amber-400 via-amber-200 to-yellow-400 shadow-md flex items-center justify-center relative transition-transform ${
               toss.phase === 'FLIPPING' ? 'animate-spin' : ''
             }`}
           >
-            <div className="w-18 h-18 rounded-full border border-amber-600/30 flex items-center justify-center">
+            <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-full border border-amber-600/30 flex items-center justify-center">
               {toss.phase === 'CALLING' || toss.phase === 'FLIPPING' ? (
                 <Disc className="w-8 h-8 text-amber-900/50" />
               ) : (
@@ -82,14 +82,14 @@ export const TossModal: React.FC<TossModalProps> = ({
                 <span className="text-xs font-semibold text-neutral-500 block">
                   Select option
                 </span>
-                <div className="grid grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-2 gap-2 sm:gap-2.5 w-full">
                   <button
                     type="button"
                     onClick={() => {
                       sound.playSelect();
                       onCallToss('HEADS');
                     }}
-                    className="py-3 px-3 rounded-2xl text-white font-bold text-xs btn-tactile-blue cursor-pointer transition-all"
+                    className="py-2.5 sm:py-3 px-2 rounded-2xl text-white font-bold text-xs btn-tactile-blue cursor-pointer transition-all box-border"
                   >
                     HEADS
                   </button>
@@ -99,16 +99,16 @@ export const TossModal: React.FC<TossModalProps> = ({
                       sound.playSelect();
                       onCallToss('TAILS');
                     }}
-                    className="py-3 px-3 rounded-2xl text-white font-bold text-xs btn-tactile-indigo cursor-pointer transition-all"
+                    className="py-2.5 sm:py-3 px-2 rounded-2xl text-white font-bold text-xs btn-tactile-indigo cursor-pointer transition-all box-border"
                   >
                     TAILS
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="p-3.5 rounded-2xl bg-white/60 border border-neutral-200/60 text-xs font-semibold text-neutral-500 flex items-center justify-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
-                <span>{caller.name} is making the call...</span>
+              <div className="p-3 rounded-2xl bg-white/60 border border-neutral-200/60 text-xs font-semibold text-neutral-500 flex items-center justify-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping shrink-0" />
+                <span className="truncate">{caller.name} is making the call...</span>
               </div>
             )}
           </div>
@@ -116,7 +116,7 @@ export const TossModal: React.FC<TossModalProps> = ({
 
         {/* STAGE 2: FLIPPING */}
         {toss.phase === 'FLIPPING' && (
-          <div className="p-2.5 text-xs font-semibold text-amber-700 animate-pulse">
+          <div className="p-2 text-xs font-semibold text-amber-700 animate-pulse">
             Flipping the coin...
           </div>
         )}
@@ -124,8 +124,8 @@ export const TossModal: React.FC<TossModalProps> = ({
         {/* STAGE 3: DECIDING */}
         {toss.phase === 'DECIDING' && (
           <div className="space-y-3 animate-fadeIn">
-            <div className="p-3 rounded-2xl bg-amber-50/80 border border-amber-200/60">
-              <span className="text-xs font-bold text-amber-900 block">
+            <div className="p-2.5 rounded-2xl bg-amber-50/80 border border-amber-200/60">
+              <span className="text-xs font-bold text-amber-900 block truncate">
                 {winner?.name} won the toss ({toss.result})
               </span>
             </div>
@@ -135,14 +135,14 @@ export const TossModal: React.FC<TossModalProps> = ({
                 <span className="text-xs font-semibold text-neutral-500 block">
                   Choose strategy
                 </span>
-                <div className="grid grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-2 gap-2 sm:gap-2.5 w-full">
                   <button
                     type="button"
                     onClick={() => {
                       sound.playSelect();
                       onMakeDecision('BAT');
                     }}
-                    className="py-3 px-3 rounded-2xl text-white font-bold text-xs btn-tactile-blue cursor-pointer transition-all"
+                    className="py-2.5 sm:py-3 px-2 rounded-2xl text-white font-bold text-xs btn-tactile-blue cursor-pointer transition-all box-border"
                   >
                     BAT FIRST
                   </button>
@@ -153,16 +153,16 @@ export const TossModal: React.FC<TossModalProps> = ({
                       sound.playSelect();
                       onMakeDecision('BOWL');
                     }}
-                    className="py-3 px-3 rounded-2xl text-white font-bold text-xs btn-tactile-green cursor-pointer transition-all"
+                    className="py-2.5 sm:py-3 px-2 rounded-2xl text-white font-bold text-xs btn-tactile-green cursor-pointer transition-all box-border"
                   >
                     BOWL FIRST
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="p-3.5 rounded-2xl bg-white/60 border border-neutral-200/60 text-xs font-semibold text-neutral-500 flex items-center justify-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping" />
-                <span>{winner?.name} is deciding...</span>
+              <div className="p-3 rounded-2xl bg-white/60 border border-neutral-200/60 text-xs font-semibold text-neutral-500 flex items-center justify-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping shrink-0" />
+                <span className="truncate">{winner?.name} is deciding...</span>
               </div>
             )}
           </div>
