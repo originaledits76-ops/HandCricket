@@ -1,0 +1,6 @@
+{
+  "name": "Hand Cricket Live",
+  "description": "Real-time online multiplayer hand cricket game featuring live coin toss, 10-second timer, strategic defensive play, customizable overs and wickets, and premium tactile iOS design.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

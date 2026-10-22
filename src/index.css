@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  body, *, button, input, select, textarea {
+    font-family: 'Inter', 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif !important;
+  }
+
+  body {
+    background-color: #f8f9fa;
+    color: #111827;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overflow-x: hidden;
+  }
+}
+
+/* Liquid Glass Effects */
+.liquid-glass {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.liquid-card {
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+/* Tactile 3D Buttons */
+.btn-tactile-blue {
+  background-color: #2563eb;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+.btn-tactile-blue:hover:not(:disabled) {
+  background-color: #1d4ed8;
+}
+.btn-tactile-blue:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.2);
+}
+
+.btn-tactile-indigo {
+  background-color: #4f46e5;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+}
+.btn-tactile-indigo:hover:not(:disabled) {
+  background-color: #4338ca;
+}
+.btn-tactile-indigo:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.2);
+}
+
+.btn-tactile-green {
+  background-color: #16a34a;
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3);
+}
+.btn-tactile-green:hover:not(:disabled) {
+  background-color: #15803d;
+}
+.btn-tactile-green:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 2px 6px rgba(22, 163, 74, 0.2);
+}
+
+.btn-tactile-gray {
+  background-color: #f3f4f6;
+  color: #1f2937;
+  border: 1px solid #e5e7eb;
+}
+.btn-tactile-gray:hover:not(:disabled) {
+  background-color: #e5e7eb;
+}
+.btn-tactile-gray:active:not(:disabled) {
+  transform: translateY(2px);
+}
